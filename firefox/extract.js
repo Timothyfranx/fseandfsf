@@ -549,6 +549,7 @@ function renderArrangingCard(j) {
       <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
         <button class="btn btn-success btn-sm" data-job-id="${j.id}" data-action="confirm-arrange" ${j.pages.length === 0 ? 'disabled' : ''}>✔ Confirm & Extract to JSON</button>
         <button class="btn btn-primary btn-sm" data-job-id="${j.id}" data-action="download-zip" ${j.pages.length === 0 ? 'disabled' : ''}>⬇ Download as ZIP</button>
+        ${j.lastRemoved ? `<button class="btn btn-warning btn-sm" data-job-id="${j.id}" data-action="undo-remove-page">↺ Undo remove</button>` : ''}
         <button class="btn btn-ghost btn-sm" data-job-id="${j.id}" data-action="remove-job" style="margin-left:auto;">🗑 Discard</button>
       </div>
     </div>
@@ -782,13 +783,27 @@ function setupExtractListeners() {
         renderJobQueue();
         break;
       }
-      case 'remove-job':
+      case 'remove-job': {
+        if (job && job.status === 'arranging' && job.pages.length > 0) {
+          if (!confirm(`Discard "${job.name}" and its ${job.pages.length} arranged page(s)? This can't be undone.`)) return;
+        }
         jobQueue = jobQueue.filter(j => j.id !== btn.dataset.jobId);
         renderJobQueue();
         break;
+      }
       case 'remove-page': {
         if (!job) return;
-        job.pages.splice(Number(btn.dataset.pageIdx), 1);
+        const idx = Number(btn.dataset.pageIdx);
+        job.lastRemoved = { page: job.pages[idx], index: idx };
+        job.pages.splice(idx, 1);
+        renderJobQueue();
+        break;
+      }
+      case 'undo-remove-page': {
+        if (!job || !job.lastRemoved) return;
+        const { page, index } = job.lastRemoved;
+        job.pages.splice(Math.min(index, job.pages.length), 0, page);
+        job.lastRemoved = null;
         renderJobQueue();
         break;
       }

@@ -518,7 +518,7 @@ function downloadJSON() {
 //  HEADERS
 // ════════════════════════════════════════════════
 function initHeaders() {
-  headers = data.length > 0 ? Object.keys(data[0]) : COLS;
+  headers = data.length > 0 ? Object.keys(data[0]).filter(h => h !== 'review') : COLS;
   ['filterCol', 'replaceCol', 'bulkCol'].forEach(id => {
     const sel = document.getElementById(id);
     const first = sel.options[0].outerHTML;
@@ -678,14 +678,16 @@ function checkRinIntegrity() {
     }
   }
   const totalMissing = (max - min + 1) - unique.length;
+  const flaggedCount = data.filter(r => r.review).length;
 
-  if (gapRanges.length === 0 && duplicates.length === 0) {
+  if (gapRanges.length === 0 && duplicates.length === 0 && flaggedCount === 0) {
     banner.className = 'rin-banner ok';
     banner.textContent = `RIN check: ${unique.length} records, RIN ${min}-${max}, no gaps or duplicates`;
   } else {
     let msg = `RIN check: ${unique.length} records, RIN ${min}-${max}`;
     if (gapRanges.length > 0) msg += ` — missing ${totalMissing} RIN(s): ${gapRanges.join(', ')}`;
     if (duplicates.length > 0) msg += ` — duplicate RIN(s): ${duplicates.join(', ')}`;
+    if (flaggedCount > 0) msg += ` — ${flaggedCount} row(s) flagged for review (highlighted below)`;
     banner.className = 'rin-banner warn';
     banner.textContent = msg;
   }
@@ -696,6 +698,7 @@ function makeRow(row, i) {
   const tr = document.createElement('tr');
   tr.dataset.index = i;
   if (selectedRows.has(i)) tr.classList.add('selected');
+  if (row.review) { tr.classList.add('flagged-row'); tr.title = 'Flagged by extraction as uncertain — double-check this row'; }
 
   // Checkbox
   const tdCk = document.createElement('td');
