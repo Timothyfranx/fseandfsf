@@ -121,6 +121,17 @@ async function startFillForTab(tabId, records, speed) {
       const rin = String(record.rin).trim();
 
       let navAttempts = 0;
+      // clickNextOrBegin() falls back to "Begin Next Page" once existing pages
+      // run out — that CREATES a brand-new page on FamilySearch, unlike normal
+      // "next page" navigation. If the target row still isn't found right after
+      // creating one, repeating that is not "still searching", it's creating
+      // page after page of junk on the user's real record — and since the
+      // search can only move forward, every later record would hit the exact
+      // same trap too. So this is capped far below the normal 40-attempt
+      // search ceiling, and stops the WHOLE session (not just this record)
+      // with a loud, specific error instead of ploughing into the rest of
+      // the list.
+      let consecutiveNewPages = 0;
       while (!(await exec(tabId, { action: 'rowExists', rin })) && navAttempts < 40) {
         if (session.stopped) break;
         // goToNextPage's own adaptive wait (background.js PAGE_TURN_MAX_MS)
@@ -134,6 +145,16 @@ async function startFillForTab(tabId, records, speed) {
           session.errors.push(`Stopped: ${nav.reason}`);
           session.stopped = true;
           break;
+        }
+        if (nav.usedBegin) {
+          consecutiveNewPages++;
+          if (consecutiveNewPages > 3) {
+            session.errors.push(`Stopped — RIN ${rin} still wasn't found after creating ${consecutiveNewPages} new pages in a row. To avoid creating more blank pages on the form, the fill has stopped completely. Check that RIN ${rin} actually belongs on this form, and that the fill started from the right page, before trying again.`);
+            session.stopped = true;
+            break;
+          }
+        } else {
+          consecutiveNewPages = 0;
         }
       }
 
@@ -328,10 +349,10 @@ async function goToNextPage(tabId) {
 
     if (navClick.usedBegin) {
       const rowsCheck = await exec(tabId, { action: 'pageHasRows' });
-      if (rowsCheck.hasRows) return { ok: true };
+      if (rowsCheck.hasRows) return { ok: true, usedBegin: true };
     } else {
       const now = await exec(tabId, { action: 'getCurrentPage' });
-      if (now.page && before.page && now.page > before.page) return { ok: true };
+      if (now.page && before.page && now.page > before.page) return { ok: true, usedBegin: false };
     }
 
     await bgSleep(PAGE_TURN_POLL_MS);
