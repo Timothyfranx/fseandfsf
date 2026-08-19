@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FamilySearch AutoFill</title>
+<style>
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface2: #eef1f4;
+  --border: #d7dce1;
+  --accent: #0f6e91;
+  --accent2: #e0832e;
+  --green: #1f7a4d;
+  --yellow: #a86b00;
+  --red: #b3261e;
+  --text: #1c1e21;
+  --muted: #6b7280;
+  --selected: #e5f0f7;
+  --row-hover: #f6f8fa;
+
+  --success-bg: #e6f4ec;
+  --success-border: #b8e0c8;
+  --danger-bg: #fbeaea;
+  --danger-border: #f0c2c0;
+  --warning-bg: #fdf3e0;
+  --warning-border: #f0d9a8;
+  --info-bg: #e5f0f7;
+  --info-border: #bcdcee;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+  min-width: 520px;
+  max-width: 1600px;
+  margin: 0 auto;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(20, 30, 40, 0.06);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo { font-size: 16px; font-weight: 800; color: var(--accent); display: flex; align-items: center; gap: 6px; }
+.logo span { color: var(--accent2); }
+
+.nav {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  align-items: center;
+}
+
+.nav-btn {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.nav-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* ── VIEWS ── */
+.view { display: none; padding: 10px 12px; }
+.view.active { display: block; }
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.btn:active { transform: scale(0.95); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; pointer-events: none; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-success { background: var(--success-bg); color: var(--green); border: 1px solid var(--success-border); }
+.btn-danger { background: var(--danger-bg); color: var(--red); border: 1px solid var(--danger-border); }
+.btn-warning { background: var(--warning-bg); color: var(--yellow); border: 1px solid var(--warning-border); }
+.btn-sm { font-size: 10px; padding: 4px 8px; }
+
+/* ── BUSY SPINNER (setBusy/clearBusy in popup.js) ── */
+.btn-spinner {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+  margin-right: 2px;
+  vertical-align: -1px;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+
+/* ── EDITOR TOOLBAR ── */
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.divider { width: 1px; background: var(--border); margin: 0 2px; }
+
+/* ── SEARCH / FILTER ROW ── */
+.filter-row {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.input-field {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 7px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.input-field:focus { border-color: var(--accent); }
+.input-field::placeholder { color: var(--muted); }
+.input-field.grow { flex: 1; }
+
+select.input-field { cursor: pointer; }
+
+/* ── BULK PANEL ── */
+.bulk-panel {
+  background: var(--selected);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  display: none;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bulk-panel.visible { display: flex; }
+.bulk-label { font-size: 11px; font-weight: 700; color: var(--accent); }
+
+/* ── TABLE ── */
+.table-wrapper {
+  overflow: auto;
+  height: calc(100vh - 200px);
+  min-height: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(20, 30, 40, 0.05);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  min-width: 700px;
+  table-layout: fixed;
+}
+
+thead { position: sticky; top: 0; z-index: 5; }
+thead tr { background: var(--surface2); }
+
+th {
+  position: relative;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  padding: 8px 6px;
+  text-align: left;
+  border-bottom: 2px solid var(--border);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  user-select: none;
+  box-sizing: border-box;
+}
+th:hover { background: var(--border); }
+th.no-sort:hover { background: var(--surface2); }
+
+.th-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 6;
+}
+.col-resize-handle:hover,
+.col-resize-handle.active {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+body.col-resizing,
+body.col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+tbody tr { border-bottom: 1px solid var(--border); }
+tbody tr:hover { background: var(--row-hover); }
+tbody tr.selected { background: var(--selected); }
+tbody tr.filtered-out { display: none; }
+
+td {
+  padding: 0;
+  border-right: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+td.td-check { width: 28px; text-align: center; padding: 4px; }
+td.td-num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+  padding: 4px;
+  width: 32px;
+  user-select: none;
+}
+
+td input.cell-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 6px;
+  width: 100%;
+  outline: none;
+  min-width: 50px;
+}
+td input.cell-input:focus {
+  background: var(--info-bg);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 3px;
+}
+td input.cell-input.is-null { color: var(--muted); font-style: italic; }
+
+input[type="checkbox"] {
+  width: 14px; height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ── STATUS ROW ── */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  color: var(--muted);
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.status-dot.warn { background: var(--yellow); }
+.status-text { flex: 1; }
+.undo-btns { display: flex; gap: 4px; margin-left: auto; }
+
+/* ── FILL VIEW ── */
+.fill-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.fill-header h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.speed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.tab-list { display: flex; flex-direction: column; gap: 8px; }
+
+.tab-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 2px rgba(20, 30, 40, 0.05);
+}
+
+.tab-card.filling { border-color: var(--accent); }
+.tab-card.done { border-color: var(--green); }
+.tab-card.error { border-color: var(--red); }
+.tab-card.stopped { border-color: var(--yellow); }
+
+.tab-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tab-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  color: var(--muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-status {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+.tab-status.idle { background: var(--surface); color: var(--muted); }
+.tab-status.filling { background: var(--info-bg); color: var(--accent); }
+.tab-status.done { background: var(--success-bg); color: var(--green); }
+.tab-status.error { background: var(--danger-bg); color: var(--red); }
+.tab-status.stopped { background: var(--warning-bg); color: var(--yellow); }
+
+.tab-card-body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tab-assigned {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  color: var(--muted);
+  flex: 1;
+}
+
+.progress-bar-wrap {
+  width: 100%;
+  background: var(--border);
+  border-radius: 4px;
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.progress-bar.done { background: var(--green); }
+.progress-bar.error { background: var(--red); }
+
+.progress-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.no-tabs {
+  text-align: center;
+  padding: 30px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.no-tabs .icon { font-size: 32px; margin-bottom: 8px; }
+
+/* ── MODAL ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 8px 30px rgba(20, 30, 40, 0.25);
+}
+.modal h3 { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+.modal p { font-size: 12px; color: var(--muted); margin-bottom: 14px; white-space: pre-line; }
+.modal-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(20, 30, 40, 0.18);
+  z-index: 300;
+  opacity: 0;
+  transition: all 0.2s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.success { border-color: var(--green); color: var(--green); }
+.toast.error { border-color: var(--red); color: var(--red); }
+.toast.warning { border-color: var(--yellow); color: var(--yellow); }
+.toast.info { border-color: var(--accent); color: var(--accent); }
+
+/* ── FILE TABS (one per loaded JSON file — distinct from the browser-tab
+   cards in the Fill view) ── */
+.file-tab-strip {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  margin-bottom: 8px;
+  padding-bottom: 2px;
+}
+
+.file-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 5px 6px 5px 10px;
+  border-radius: 7px 7px 0 0;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.file-tab:hover { background: var(--row-hover); color: var(--text); }
+.file-tab.active {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 -1px 0 var(--accent) inset;
+}
+
+.file-tab-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tab-close {
+  font-size: 10px;
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 1px 4px;
+  line-height: 1.4;
+}
+.file-tab-close:hover { background: var(--danger-bg); color: var(--red); }
+
+/* ── RIN INTEGRITY BANNER ── */
+.rin-banner {
+  display: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: 7px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  line-height: 1.5;
+}
+.rin-banner.ok { background: var(--success-bg); color: var(--green); border-color: var(--success-border); }
+.rin-banner.warn { background: var(--warning-bg); color: var(--yellow); border-color: var(--warning-border); }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">🌳 Gene<span>Fill</span></div>
+  <div class="nav">
+    <button class="nav-btn active" id="navEditor">✎ Editor</button>
+    <button class="nav-btn" id="navExtract">🖼 Extract</button>
+    <button class="nav-btn" id="navFill">⚡ Fill</button>
+    <button class="nav-btn" id="btnOpenTab" style="border-color:var(--accent); color:var(--accent);" title="Open Editor in a dedicated full browser tab">↗ Full Tab Editor</button>
+  </div>
+</div>
+
+<!-- ══════════════ EDITOR VIEW ══════════════ -->
+<div class="view active" id="viewEditor">
+
+  <!-- Toolbar -->
+  <div class="editor-toolbar">
+    <button class="btn btn-ghost" id="btnLoad">📂 Load</button>
+    <button class="btn btn-ghost" id="btnAppend">➕ Append</button>
+    <button class="btn btn-ghost" id="btnRawPaste">📋 Raw / Paste</button>
+    <button class="btn btn-success" id="btnSave">⬇ Save</button>
+    <div class="divider"></div>
+    <button class="btn btn-warning" id="btnCleanGenealogy" title="Clear death info for living & align death place to birth place for deceased">🧹 Clean Genealogy</button>
+    <button class="btn btn-ghost btn-sm" id="btnRepairJSON" title="Attempt auto-repair on malformed JSON text">🛠 Repair</button>
+    <button class="btn btn-ghost btn-sm" id="btnFormatJSON" title="Format JSON with indentations">✨ Format</button>
+    <div class="divider"></div>
+    <button class="btn btn-primary" id="btnAddRow">＋ Row</button>
+    <button class="btn btn-danger btn-sm" id="btnClearSession">🗑 Clear</button>
+    <div class="divider"></div>
+    <button class="btn btn-ghost btn-sm" id="btnUndo">↩</button>
+    <button class="btn btn-ghost btn-sm" id="btnRedo">↪</button>
+  </div>
+
+  <!-- File Tabs — one per loaded JSON file -->
+  <div class="file-tab-strip" id="fileTabStrip" style="display:none;"></div>
+
+  <!-- RIN Integrity Banner -->
+  <div class="rin-banner" id="rinIntegrityBanner"></div>
+
+  <!-- Filter row -->
+  <div class="filter-row">
+    <input class="input-field grow" id="filterInput" type="text" placeholder="Search...">
+    <select class="input-field" id="filterCol">
+      <option value="">All cols</option>
+    </select>
+  </div>
+
+  <!-- Find & Replace row -->
+  <div class="filter-row">
+    <input class="input-field grow" id="findInput" type="text" placeholder="Find...">
+    <input class="input-field grow" id="replaceInput" type="text" placeholder="Replace...">
+    <select class="input-field" id="replaceCol">
+      <option value="">All cols</option>
+    </select>
+    <button class="btn btn-warning btn-sm" id="btnReplace">Go</button>
+  </div>
+
+  <!-- Bulk panel -->
+  <div class="bulk-panel" id="bulkPanel">
+    <span class="bulk-label" id="bulkLabel">0 selected</span>
+    <select class="input-field" id="bulkCol">
+      <option value="">Column...</option>
+    </select>
+    <input class="input-field" id="bulkVal" type="text" placeholder="New value..." style="max-width:120px;">
+    <button class="btn btn-primary btn-sm" id="btnBulkApply">Apply</button>
+    <button class="btn btn-danger btn-sm" id="btnBulkDelete">Delete</button>
+    <button class="btn btn-ghost btn-sm" id="btnClearSel">✕</button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrapper">
+    <div id="emptyState" style="padding:40px;text-align:center;color:var(--muted);font-size:12px;">
+      <div style="font-size:32px;margin-bottom:8px;">📋</div>
+      <div>Load a JSON file or paste raw JSON to begin<br><span style="font-size:10px;">Loading multiple files gives each its own tab above</span></div>
+    </div>
+    <table id="dataTable" style="display:none;">
+      <colgroup id="tableColgroup"></colgroup>
+      <thead id="tableHead"></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Status row -->
+  <div class="status-row">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-text" id="statusText">Ready</span>
+    <span id="rowCountBadge" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:2px 8px;">0 rows</span>
+  </div>
+
+</div>
+
+<!-- ══════════════ EXTRACT VIEW ══════════════ -->
+<div class="view" id="viewExtract">
+
+  <div class="fill-header">
+    <h3>🖼 Image / PDF → JSON Extraction</h3>
+  </div>
+
+  <!-- API Key Settings -->
+  <div class="tab-card" style="margin-bottom:12px;">
+    <div class="tab-card-header" style="margin-bottom:8px;"><strong>Gemini API Keys</strong></div>
+    <p style="font-size:11px; color:var(--muted); margin-bottom:10px;">Paste up to 3 free Gemini API keys (from Google AI Studio). Each key runs its own job in parallel, so 3 keys means up to 3x the speed.</p>
+    <div id="apiKeySettings">
+      <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;" id="apiKeyRow1"></div>
+      <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;" id="apiKeyRow2"></div>
+      <div style="display:flex; gap:6px; align-items:center;" id="apiKeyRow3"></div>
+    </div>
+  </div>
+
+  <!-- Queue Actions -->
+  <div class="editor-toolbar" style="margin-bottom:10px;">
+    <button class="btn btn-primary btn-sm" id="btnExtractAddImages">🖼 Upload Images</button>
+    <button class="btn btn-primary btn-sm" id="btnExtractAddPdf">📄 Upload PDF</button>
+    <button class="btn btn-success btn-sm" id="btnExtractRunAll">▶ Run All</button>
+    <button class="btn btn-danger btn-sm" id="btnExtractClearQueue">🗑 Clear Finished</button>
+  </div>
+
+  <!-- Job Queue -->
+  <div class="tab-list" id="extractJobList">
+    <div class="no-tabs">
+      <div class="icon">🖼</div>
+      <div>Add images or a PDF to begin</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════ FILL VIEW ══════════════ -->
+<div class="view" id="viewFill">
+
+  <div class="fill-header">
+    <h3>⚡ Multi-Tab Fill</h3>
+    <span id="tabCountBadge" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--accent);">0 Tabs</span>
+    <button class="btn btn-ghost btn-sm" id="btnDetectTabs" style="margin-left:auto;">🔄 Detect Tabs</button>
+  </div>
+
+  <!-- Multi-tab Actions -->
+  <div class="editor-toolbar" style="margin-bottom:10px;">
+    <button class="btn btn-warning btn-sm" id="btnAutoMatch" title="Automatically match JSON files/records to tabs by matching the last 4 digits">🎯 Auto-Match (4-Digit ID)</button>
+    <button class="btn btn-ghost btn-sm" id="btnAutoSplit" title="Divide JSON evenly across 3-5 detected tabs">✂ Split across Tabs</button>
+    <button class="btn btn-ghost btn-sm" id="btnAssignAll" title="Assign full dataset to all tabs">📋 Assign to All</button>
+    <button class="btn btn-success btn-sm" id="btnFillAll">▶ Fill All Tabs</button>
+    <button class="btn btn-primary btn-sm" id="btnSaveAll" title="Save page on active FamilySearch forms">💾 Save Page</button>
+    <button class="btn btn-danger btn-sm" id="btnStopAll">⏹ Stop All</button>
+  </div>
+
+  <!-- Multi-tab Summary Progress Bar -->
+  <div id="multiTabSummary" style="display:none; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:10px;">
+    <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:700; color:var(--text); margin-bottom:4px;">
+      <span>Multi-Tab Total Progress</span>
+      <span id="multiTabStats" style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--accent);">0 / 0</span>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="multiTabBar" style="width:0%;"></div>
+    </div>
+  </div>
+
+  <!-- Speed & Start RIN row -->
+  <div class="speed-row" style="flex-wrap:wrap; gap:8px;">
+    <span>Speed:</span>
+    <select class="input-field" id="speedSelect">
+      <option value="600">🐢 Safe (600ms)</option>
+      <option value="350" selected>⚡ Normal (350ms)</option>
+      <option value="150">🚀 Turbo (150ms)</option>
+    </select>
+    <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
+      <span>Start at RIN:</span>
+      <input class="input-field" id="startRinInput" type="number" min="1" placeholder="1 (Beginning)" style="width:105px;" title="Specify starting RIN or leave blank to start from beginning (RIN 1)">
+      <button class="btn btn-ghost btn-sm" id="btnResetRin" title="Reset to start filling from RIN 1">⏮ Start from Beginning</button>
+    </div>
+  </div>
+
+  <!-- Tab list -->
+  <div class="tab-list" id="tabList">
+    <div class="no-tabs">
+      <div class="icon">🔍</div>
+      <div>Click "Detect Tabs" to find open FamilySearch forms</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- RAW JSON PASTE / EDIT MODAL -->
+<div class="modal-overlay" id="rawJsonModal">
+  <div class="modal" style="max-width: 480px;">
+    <h3>📋 Raw JSON Editor / Text Paste</h3>
+    <p style="margin-bottom:8px;">Paste unformatted or malformed JSON text. Use Repair or Format before loading.</p>
+    <textarea id="rawJsonArea" class="input-field" style="width:100%; height:180px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:10px; margin-bottom:10px; resize:vertical; box-sizing:border-box;" placeholder='[{"rin": 1, "given_names": "John", "living": "No", "birth_location": "London", "death_location": ""}]'></textarea>
+    <div style="display:flex; gap:6px; justify-content:space-between; flex-wrap:wrap;">
+      <div style="display:flex; gap:4px;">
+        <button class="btn btn-ghost btn-sm" id="rawFormatBtn">✨ Format</button>
+        <button class="btn btn-warning btn-sm" id="rawRepairBtn">🛠 Repair</button>
+      </div>
+      <div style="display:flex; gap:4px;">
+        <button class="btn btn-ghost btn-sm" id="rawCancelBtn">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="rawApplyBtn">Load into Editor</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <h3 id="confirmTitle">Confirm</h3>
+    <p id="confirmMsg"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="confirmCancel">Cancel</button>
+      <button class="btn btn-primary" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="fileInputLoad" accept=".json" multiple style="display:none;">
+<input type="file" id="fileInputAppend" accept=".json" multiple style="display:none;">
+<input type="file" id="extractImageInput" accept=".jpg,.jpeg,.png" multiple style="display:none;">
+<input type="file" id="extractPdfInput" accept=".pdf" multiple style="display:none;">
+
+<div style="height:16px;"></div>
+
+<script src="popup.js"></script>
+<script src="extract.js"></script>
+</body>
+</html>
