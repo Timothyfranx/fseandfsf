@@ -148,16 +148,15 @@ async function startFillForTab(tabId, records, speed) {
         const nav = await goToNextPage(tabId);
         navAttempts++;
         if (!nav.ok) {
+          // goToNextPage() only ever reports success for a page-creation once
+          // it's actually confirmed new rows appeared — so a failure here
+          // (including "didn't add any rows in time") is a genuine stall,
+          // not a slow-but-working page load. Stopping the whole session
+          // rather than skipping just this record, since the search can only
+          // move forward and every later record would hit the same trap.
           session.errors.push(`Stopped: ${nav.reason}`);
           session.stopped = true;
           break;
-        }
-        if (nav.usedBegin) {
-          if (!nav.grew) {
-            session.errors.push(`Stopped — creating a new page didn't add any rows past RIN ${nav.maxRin ?? '?'}, so RIN ${rin} can't be reached this way. The fill has stopped to avoid creating more blank pages. Check that RIN ${rin} actually belongs on this form.`);
-            session.stopped = true;
-            break;
-          }
         }
       }
 
@@ -369,11 +368,13 @@ async function goToNextPage(tabId) {
     }
 
     if (navClick.usedBegin) {
-      const rowsCheck = await exec(tabId, { action: 'pageHasRows' });
-      if (rowsCheck.hasRows) {
-        const afterMax = await exec(tabId, { action: 'getMaxRin' });
-        const grew = afterMax.maxRin !== null && (beforeMax.maxRin === null || afterMax.maxRin > beforeMax.maxRin);
-        return { ok: true, usedBegin: true, grew, maxRin: afterMax.maxRin };
+      // "Does any row exist" isn't a real "the new page landed" signal here —
+      // it's true instantly on the OLD page too, since that already has rows.
+      // The max RIN actually growing past what it was before this click is
+      // the real completion signal, so poll on that directly.
+      const afterMax = await exec(tabId, { action: 'getMaxRin' });
+      if (afterMax.maxRin !== null && (beforeMax.maxRin === null || afterMax.maxRin > beforeMax.maxRin)) {
+        return { ok: true, usedBegin: true, grew: true, maxRin: afterMax.maxRin };
       }
     } else {
       const now = await exec(tabId, { action: 'getCurrentPage' });
@@ -383,7 +384,9 @@ async function goToNextPage(tabId) {
     await bgSleep(PAGE_TURN_POLL_MS);
   }
 
-  return { ok: false, reason: 'page did not finish loading within the wait window — connection may be too slow' };
+  return { ok: false, reason: navClick.usedBegin
+    ? `creating a new page didn't add any rows within ${PAGE_TURN_MAX_MS / 1000}s — it may not be possible to add more rows to this form this way`
+    : 'page did not finish loading within the wait window — connection may be too slow' };
 }
 
 function bgSleep(ms) {
@@ -516,9 +519,6 @@ function pageStepExecutor(step) {
         const m = (btn.getAttribute('aria-label') || '').match(/currently on page (\d+) of (\d+)/i);
         return m ? { page: parseInt(m[1], 10), total: parseInt(m[2], 10) } : { page: null, total: null };
       }
-
-      case 'pageHasRows':
-        return { hasRows: !!inputField(1, 'givenName') || !!document.querySelector('input[name^="familyTree."]') };
 
       // Highest RIN currently rendered anywhere on the page — used to tell
       // "creating a new page genuinely added rows we haven't reached yet"
