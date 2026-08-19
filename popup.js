@@ -556,7 +556,7 @@ function renderTable() {
   // not the th/td content), so resizing just means updating a <col>'s width.
   let colHtml = '<col style="width:28px;"><col style="width:34px;">';
   headers.forEach(h => {
-    colHtml += `<col data-col="${h}" style="width:${getColWidth(h)}px;">`;
+    colHtml += `<col data-col="${escapeHtml(h)}" style="width:${getColWidth(h)}px;">`;
   });
   document.getElementById('tableColgroup').innerHTML = colHtml;
 
@@ -566,7 +566,7 @@ function renderTable() {
   th += '<th class="no-sort"><input type="checkbox" id="chkAll"></th>';
   th += '<th class="no-sort">#</th>';
   headers.forEach(h => {
-    th += `<th data-col="${h}"><span class="th-label">${h.replace(/_/g,' ')}</span><span class="col-resize-handle" data-col="${h}"></span></th>`;
+    th += `<th data-col="${escapeHtml(h)}"><span class="th-label">${escapeHtml(h.replace(/_/g,' '))}</span><span class="col-resize-handle" data-col="${escapeHtml(h)}"></span></th>`;
   });
   th += '</tr>';
   head.innerHTML = th;
@@ -1418,11 +1418,14 @@ function ensureTabTracked(tabId) {
 // sent as a heartbeat from background.js) instead of a static, frozen-looking line.
 function tabProgressText(prog) {
   if (!prog.total) return 'Not started';
+  // currentRin and errors ultimately trace back to values in the loaded JSON
+  // (record.rin) — escaped here since this whole string lands in innerHTML.
+  const rin = escapeHtml(String(prog.currentRin || '–'));
   const base = prog.searching
-    ? `<span class="btn-spinner" style="margin-right:4px;"></span>Searching for RIN ${prog.currentRin || '–'} (page attempt ${prog.searchAttempt || 1}/40)...`
-    : `${prog.filled || 0} filled / ${prog.skipped || 0} skipped / ${prog.total} total — RIN ${prog.currentRin || '–'}`;
+    ? `<span class="btn-spinner" style="margin-right:4px;"></span>Searching for RIN ${rin} (page attempt ${prog.searchAttempt || 1}/40)...`
+    : `${prog.filled || 0} filled / ${prog.skipped || 0} skipped / ${prog.total} total — RIN ${rin}`;
   const errs = prog.errors && prog.errors.length
-    ? `<br>⚠ Errors: ${prog.errors.slice(0,3).join(', ')}${prog.errors.length > 3 ? '...' : ''}`
+    ? `<br>⚠ Errors: ${escapeHtml(prog.errors.slice(0,3).join(', '))}${prog.errors.length > 3 ? '...' : ''}`
     : '';
   return base + errs;
 }
