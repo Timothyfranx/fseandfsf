@@ -7,11 +7,12 @@ Multi-tab support — fill multiple forms simultaneously.
 
 ## Features
 
-- ✅ Full JSON editor (GeneEdit) built into the extension popup
+- ✅ Opens as a normal browser tab, not a popup — clicking the toolbar icon reuses that tab if it's already open, instead of stacking duplicates or risking work getting lost if a popup auto-closes
+- ✅ Full JSON editor (GeneEdit) built into the extension tab
 - ✅ Find & Replace (global or per column)
 - ✅ Bulk edit selected rows
 - ✅ Undo / Redo (50 steps)
-- ✅ Auto-save to localStorage — data survives popup close
+- ✅ Auto-save to localStorage — data survives closing the tab
 - ✅ Multi-tab simultaneous fill — assign different JSON to each tab
 - ✅ Live progress per tab (filled / skipped / total / current RIN)
 - ✅ Speed control (Safe / Normal / Turbo)
@@ -52,6 +53,8 @@ This creates icon16.png, icon32.png, icon48.png, icon96.png, icon128.png
 
 ## How to Use
 
+Click the toolbar icon to open the extension — it opens as its own browser tab, not a small popup, so it stays open however long a Fill or Extract job takes. Clicking the icon again just switches to that same tab instead of opening a second one.
+
 ### Editor Tab (✎ Editor)
 
 1. Click **📂 Load** — select your JSON file
@@ -59,7 +62,7 @@ This creates icon16.png, icon32.png, icon48.png, icon96.png, icon128.png
 3. Use **Find/Replace** to bulk update locations or names
 4. Select rows with checkboxes → **Bulk edit** or **Delete**
 5. Click **⬇ Save** to download updated JSON
-6. Data auto-saves — closing popup does NOT lose your work
+6. Data auto-saves — closing the tab does NOT lose your work
 
 ### Fill Tab (⚡ Fill)
 

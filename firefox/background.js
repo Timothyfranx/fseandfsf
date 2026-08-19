@@ -37,6 +37,23 @@ chrome.tabs.onRemoved.addListener(tabId => {
   }
 });
 
+// Opens the extension UI as a normal, persistent browser tab instead of the
+// default toolbar popup. A popup auto-closes the instant it loses focus —
+// fine for Fill (which runs here in the background and survives that), but
+// fatal for an in-progress Extract job, whose state lives only in that
+// document's memory. Reuses an already-open tab instead of stacking new
+// ones if the toolbar icon is clicked again.
+chrome.action.onClicked.addListener(async () => {
+  const url = chrome.runtime.getURL('popup.html');
+  const existing = await chrome.tabs.query({ url });
+  if (existing.length > 0) {
+    await chrome.tabs.update(existing[0].id, { active: true });
+    await chrome.windows.update(existing[0].windowId, { focused: true });
+  } else {
+    await chrome.tabs.create({ url });
+  }
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
     case 'GET_SESSIONS':
