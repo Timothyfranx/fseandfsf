@@ -1422,7 +1422,7 @@ function tabProgressText(prog) {
   // (record.rin) — escaped here since this whole string lands in innerHTML.
   const rin = escapeHtml(String(prog.currentRin || '–'));
   const base = prog.searching
-    ? `<span class="btn-spinner" style="margin-right:4px;"></span>Searching for RIN ${rin} (page attempt ${prog.searchAttempt || 1}/40)...`
+    ? `<span class="btn-spinner" style="margin-right:4px;"></span>Searching for RIN ${rin} (page attempt ${prog.searchAttempt || 1}/200)...`
     : `${prog.filled || 0} filled / ${prog.skipped || 0} skipped / ${prog.total} total — RIN ${rin}`;
   const errs = prog.errors && prog.errors.length
     ? `<br>⚠ Errors: ${escapeHtml(prog.errors.slice(0,3).join(', '))}${prog.errors.length > 3 ? '...' : ''}`

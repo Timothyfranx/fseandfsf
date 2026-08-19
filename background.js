@@ -123,16 +123,22 @@ async function startFillForTab(tabId, records, speed) {
       let navAttempts = 0;
       // clickNextOrBegin() falls back to "Begin Next Page" once existing pages
       // run out — that CREATES a brand-new page on FamilySearch, unlike normal
-      // "next page" navigation. If the target row still isn't found right after
-      // creating one, repeating that is not "still searching", it's creating
-      // page after page of junk on the user's real record — and since the
-      // search can only move forward, every later record would hit the exact
-      // same trap too. So this is capped far below the normal 40-attempt
-      // search ceiling, and stops the WHOLE session (not just this record)
-      // with a loud, specific error instead of ploughing into the rest of
-      // the list.
-      let consecutiveNewPages = 0;
-      while (!(await waitForRowExists(tabId, rin, 1200)) && navAttempts < 40) {
+      // "next page" navigation. That's legitimate when the target RIN is
+      // genuinely beyond the form's current pages (e.g. "Start at RIN" jumping
+      // ahead) — reaching it can take several page-creations in a row, and
+      // each one should be allowed as long as it's making real progress.
+      // What's NOT legitimate is creating a page that doesn't add any new
+      // rows at all — that means something's actually stuck, and continuing
+      // would just create junk page after junk page (and since the search
+      // can only move forward, every later record would hit the same trap).
+      // So progress is judged by whether the highest RIN on the page actually
+      // grows, not by a blind count of how many creations happened.
+      // 200 rather than 40 — the real safety net is the "must grow" check
+      // above, which stops a genuine stall almost immediately (1 iteration),
+      // so this ceiling only needs to bound worst-case time, not damage. That
+      // headroom matters for "Start at RIN" jumping far ahead of the form's
+      // current pages, which can legitimately take many page-creations.
+      while (!(await waitForRowExists(tabId, rin, 1200)) && navAttempts < 200) {
         if (session.stopped) break;
         // goToNextPage's own adaptive wait (background.js PAGE_TURN_MAX_MS)
         // now confirms the page actually turned before returning, so there's
@@ -147,14 +153,11 @@ async function startFillForTab(tabId, records, speed) {
           break;
         }
         if (nav.usedBegin) {
-          consecutiveNewPages++;
-          if (consecutiveNewPages > 3) {
-            session.errors.push(`Stopped — RIN ${rin} still wasn't found after creating ${consecutiveNewPages} new pages in a row. To avoid creating more blank pages on the form, the fill has stopped completely. Check that RIN ${rin} actually belongs on this form, and that the fill started from the right page, before trying again.`);
+          if (!nav.grew) {
+            session.errors.push(`Stopped — creating a new page didn't add any rows past RIN ${nav.maxRin ?? '?'}, so RIN ${rin} can't be reached this way. The fill has stopped to avoid creating more blank pages. Check that RIN ${rin} actually belongs on this form.`);
             session.stopped = true;
             break;
           }
-        } else {
-          consecutiveNewPages = 0;
         }
       }
 
@@ -354,6 +357,7 @@ async function goToNextPage(tabId) {
   }
 
   const before = await exec(tabId, { action: 'getCurrentPage' });
+  const beforeMax = await exec(tabId, { action: 'getMaxRin' });
   const navClick = await exec(tabId, { action: 'clickNextOrBegin' });
   if (!navClick.ok) return navClick;
 
@@ -366,7 +370,11 @@ async function goToNextPage(tabId) {
 
     if (navClick.usedBegin) {
       const rowsCheck = await exec(tabId, { action: 'pageHasRows' });
-      if (rowsCheck.hasRows) return { ok: true, usedBegin: true };
+      if (rowsCheck.hasRows) {
+        const afterMax = await exec(tabId, { action: 'getMaxRin' });
+        const grew = afterMax.maxRin !== null && (beforeMax.maxRin === null || afterMax.maxRin > beforeMax.maxRin);
+        return { ok: true, usedBegin: true, grew, maxRin: afterMax.maxRin };
+      }
     } else {
       const now = await exec(tabId, { action: 'getCurrentPage' });
       if (now.page && before.page && now.page > before.page) return { ok: true, usedBegin: false };
@@ -511,6 +519,22 @@ function pageStepExecutor(step) {
 
       case 'pageHasRows':
         return { hasRows: !!inputField(1, 'givenName') || !!document.querySelector('input[name^="familyTree."]') };
+
+      // Highest RIN currently rendered anywhere on the page — used to tell
+      // "creating a new page genuinely added rows we haven't reached yet"
+      // (fine, keep going) apart from "creating a new page didn't move the
+      // ceiling at all" (stuck — stop before making more junk pages).
+      case 'getMaxRin': {
+        let max = null;
+        document.querySelectorAll('input[name^="familyTree."]').forEach(el => {
+          const m = el.name.match(/^familyTree\.(\d+)\./);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (max === null || n > max) max = n;
+          }
+        });
+        return { maxRin: max };
+      }
 
       case 'clickNextOrBegin': {
         const nextBtn = findButtonByAriaLabel(/go to next page/i);
