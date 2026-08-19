@@ -17,7 +17,8 @@ Multi-tab support — fill multiple forms simultaneously.
 - ✅ Speed control (Safe / Normal / Turbo)
 - ✅ Stop fill mid-run
 - ✅ Pagination — auto-navigates through all form pages
-- ✅ Firefox compatible (Manifest V2)
+- ✅ Firefox compatible (Manifest V3, `firefox/` folder in this repo)
+- ✅ Extract tab (GeneVision) — turns scanned PDFs/photos into the JSON above using Gemini, batched 3 pages per call, with a review/rotate/reorder step before extraction
 
 ---
 
@@ -74,6 +75,21 @@ This creates icon16.png, icon32.png, icon48.png, icon96.png, icon128.png
 6. Watch the progress bars and RIN counters update live
 7. Click **⏹ Stop** to stop any tab mid-fill
 
+The fill loop runs in `background.js` (the extension's service worker), not on the page — so it does not slow down when you switch to another tab or app. If the FamilySearch tab itself is closed or navigated away mid-fill, the fill stops immediately with a clear error instead of silently "finishing" without actually filling anything.
+
+---
+
+### Extract Tab (🖼 Extract)
+
+Turns scanned sheets (PDF or photos) into the JSON format above using Gemini.
+
+1. In Settings, add at least one Gemini API key (up to 3 — jobs round-robin across them for extra throughput)
+2. Click **🖼 Upload Images** for photos, or **📄 Upload PDF** for a scanned PDF (PDFs are split into page images locally, in your browser — nothing is uploaded anywhere for this step)
+3. Review the page grid before it's sent anywhere: click a page to view it full-size, ✕ to drop a page that shouldn't be extracted (checklists, blank pages), ⟳ to rotate a sideways page, ◀▶ to fix page order
+4. Click **✔ Confirm & Extract to JSON** — pages are sent to Gemini 3 at a time; each batch retries automatically on a dropped connection or rate limit
+5. If a batch still fails after retrying, the job is marked **partial** with a **↻ Retry failed batches** button — nothing already extracted is lost
+6. Rows Gemini wasn't confident about are flagged and highlighted once loaded into the Editor tab — check the RIN banner at the top for a count
+
 ---
 
 ## Multi-Tab Workflow
@@ -122,9 +138,13 @@ To install on Firefox Android:
 
 ## Troubleshooting
 
-**"Content script not ready" error:**
-- Make sure you're on a FamilySearch pedigree form page
-- Refresh the FamilySearch tab and try again
+**"Stopped — lost contact with the FamilySearch tab" error:**
+- The tab was closed, reloaded, or navigated away from the form while a fill was running
+- Reopen the form and click Fill again — it's safe to re-run; already-filled fields will just be overwritten with the same values
+
+**Fills slow down when you switch to another tab or app:**
+- Check `chrome://settings/performance` (or the equivalent in Brave/Edge) — turn off Memory Saver, or add `familysearch.org` to "Always keep these sites active"
+- The fill loop itself runs in the background service worker and isn't slowed by tab/window focus — this is a separate browser-level setting, not a bug in the extension
 
 **Fields not filling correctly:**
 - Try Safe speed (600ms) — gives the page more time between fields
@@ -134,18 +154,24 @@ To install on Firefox Android:
 - The form may have reached its last page
 - Click Stop and check how many rows were filled
 
+**Extract job stuck on "partial":**
+- One or more batches failed even after automatic retries (bad connection, invalid/rate-limited API key) — click **↻ Retry failed batches**. Everything already extracted is kept; only the failed batches are re-sent.
+
+**Rotate your Gemini API key if it was ever shared or pasted anywhere outside this extension's Settings panel** — treat it like a password.
+
 ---
 
 ## Files
 
 ```
-fs-extension/
+fs-extension/                Chrome build (Manifest V3)
   manifest.json       Extension config
-  popup.html          Extension popup UI
-  popup.js            Editor + tab manager logic
-  background.js       Message hub + session state
-  content.js          Form filler (runs in FamilySearch tabs)
+  popup.html           Popup UI — Editor / Fill / Extract tabs
+  popup.js              Editor + multi-tab fill manager
+  background.js         Owns the fill loop and all pacing (service worker)
+  extract.js             PDF/image → JSON extraction via Gemini
   generate_icon.py    Generates PNG icons
   icon16/32/48/96/128.png  Extension icons
   README.md           This file
+firefox/                     Firefox build (Manifest V3, background script — kept in sync with the files above by hand; no build step)
 ```

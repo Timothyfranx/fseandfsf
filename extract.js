@@ -381,6 +381,14 @@ async function callGemini(apiKey, promptText, pageImages, onRetry) {
         err.httpStatus = d.error.code;
         throw err;
       }
+      if (!d.candidates || !d.candidates[0]) {
+        // No error field, but no candidates either — e.g. blocked by a safety
+        // filter. Retrying won't change the outcome, so fail clearly instead
+        // of throwing a generic TypeError that gets mistaken for a dropped
+        // connection and retried three times for nothing.
+        const reason = d.promptFeedback && d.promptFeedback.blockReason;
+        throw new Error(reason ? `Gemini blocked this request (${reason})` : 'Gemini returned no result');
+      }
       return d.candidates[0].content.parts.map(p => p.text || '').join('');
     } catch (e) {
       lastErr = e;
@@ -612,7 +620,20 @@ async function runJob(job, apiKey) {
 
     const flagged = records.filter(r => r.review).length;
     downloadJobJson(job, records);
-    const id = addFileTab(job.name, job.digits, records);
+
+    // Retrying a partial job re-runs this same code path — reuse the same
+    // Editor tab instead of adding a new one each time, or a few retries
+    // in a row leaves several stale, identically-named duplicate tabs behind.
+    let id;
+    const existingTab = job.fileTabId && loadedJsonPool.find(f => f.id === job.fileTabId);
+    if (existingTab) {
+      existingTab.data = records;
+      id = existingTab.id;
+      if (id === activeFileId) { data = records; renderTable(); }
+    } else {
+      id = addFileTab(job.name, job.digits, records);
+      job.fileTabId = id;
+    }
     renderFileTabs();
 
     if (failedCount > 0) {

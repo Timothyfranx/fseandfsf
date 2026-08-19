@@ -18,6 +18,25 @@
 const sessions = {};
 // sessions[tabId] = { status, filled, skipped, total, currentRin, errors, stopped }
 
+// Thrown by exec() when the tab itself is unreachable (closed, navigated
+// away, extension reloaded) — distinct from a normal in-page "field not
+// found" result, so a dead tab stops the fill immediately with a clear
+// reason instead of silently looping through every remaining record
+// believing each one succeeded.
+class FatalTabError extends Error {}
+
+// If a tab closes mid-fill, mark its session stopped right away — the fill
+// loop already checks session.stopped between steps, so this is a fast,
+// explicit stop instead of relying solely on the next exec() call failing.
+chrome.tabs.onRemoved.addListener(tabId => {
+  const session = sessions[tabId];
+  if (session && session.status === 'filling') {
+    session.stopped = true;
+    session.status = 'done';
+    session.errors.push('Stopped — the FamilySearch tab was closed while filling.');
+  }
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
     case 'GET_SESSIONS':
@@ -52,7 +71,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'SAVE_TAB':
       // Reuses the same adaptive clickSave() the fill loop uses, instead of
       // popup.js clicking Save and assuming it worked with no verification.
-      clickSave(msg.tabId).then(sendResponse);
+      // Caught explicitly: if the tab is gone, clickSave() now throws
+      // (FatalTabError) instead of resolving — without this catch, popup.js's
+      // saveAllTabs() would wait on this tab's response forever.
+      clickSave(msg.tabId).then(sendResponse).catch(e => sendResponse({ ok: false, reason: e.message }));
       return true; // keep the message channel open for the async response
   }
   return true;
@@ -122,7 +144,9 @@ async function startFillForTab(tabId, records, speed) {
     const saveResult = await clickSave(tabId);
     if (!saveResult.ok) session.errors.push(`Final save: ${saveResult.reason}`);
   } catch (e) {
-    session.errors.push('Fatal: ' + e.message);
+    session.errors.push(e instanceof FatalTabError
+      ? `Stopped — lost contact with the FamilySearch tab (${e.message}). Reopen the form and Fill again from where it left off.`
+      : 'Fatal: ' + e.message);
   } finally {
     session.status = 'done';
     chrome.runtime.sendMessage({
@@ -209,6 +233,10 @@ async function fillRecord(tabId, record, rin, delay) {
 
     return true;
   } catch (e) {
+    // A FatalTabError means the tab itself is gone — that isn't a one-record
+    // problem, so let it propagate up and stop the whole session instead of
+    // marking this record skipped and looping through everything remaining.
+    if (e instanceof FatalTabError) throw e;
     console.warn('[FS AutoFill][BG] Error in fillRecord:', rin, e);
     return false;
   }
@@ -300,6 +328,14 @@ function bgSleep(ms) {
 }
 
 // ── exec(): inject a single, self-contained step into the tab and run it ───
+// Throws FatalTabError when the injection itself fails (tab closed, tab
+// navigated off familysearch.org, extension reloaded) — this used to return
+// { ok: false, reason } like an in-page result, but rowExists/fieldExists
+// return plain booleans on success, so `!(await exec(...))` treated that
+// truthy failure object as "row found" and kept filling every remaining
+// record without ever touching the page, silently reporting success.
+// Throwing instead lets it propagate to the fill loop's own try/catch,
+// which stops the whole session immediately with a clear reason.
 async function exec(tabId, step) {
   try {
     const [{ result }] = await chrome.scripting.executeScript({
@@ -310,7 +346,7 @@ async function exec(tabId, step) {
     return result;
   } catch (e) {
     console.warn('[FS AutoFill][BG] exec failed:', step.action, e.message);
-    return { ok: false, reason: e.message };
+    throw new FatalTabError(e.message);
   }
 }
 
