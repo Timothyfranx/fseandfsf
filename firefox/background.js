@@ -132,7 +132,7 @@ async function startFillForTab(tabId, records, speed) {
       // with a loud, specific error instead of ploughing into the rest of
       // the list.
       let consecutiveNewPages = 0;
-      while (!(await exec(tabId, { action: 'rowExists', rin })) && navAttempts < 40) {
+      while (!(await waitForRowExists(tabId, rin, 1200)) && navAttempts < 40) {
         if (session.stopped) break;
         // goToNextPage's own adaptive wait (background.js PAGE_TURN_MAX_MS)
         // now confirms the page actually turned before returning, so there's
@@ -160,7 +160,7 @@ async function startFillForTab(tabId, records, speed) {
 
       if (session.stopped) break;
 
-      if (!(await exec(tabId, { action: 'rowExists', rin }))) {
+      if (!(await waitForRowExists(tabId, rin, 1200))) {
         session.skipped++;
         session.errors.push(`RIN ${rin}: row not found on any page`);
         reportProgress(tabId, session, rin);
@@ -287,6 +287,23 @@ async function waitForField(tabId, rin, key, maxWaitMs) {
   while (Date.now() - start < maxWaitMs) {
     if (await exec(tabId, { action: 'fieldExists', rin, key })) return true;
     await bgSleep(50);
+  }
+  return false;
+}
+
+// Same idea, for a row's own existence check. A single rowExists() call right
+// after filling the row before it can momentarily read as "not found" — e.g.
+// the row just rendered, or the page is still settling right after a save —
+// which used to be immediately read as "not on this page, go find it
+// elsewhere", sending the search off looking for a row that was right there
+// the whole time. This costs nothing on the normal case (resolves on the
+// very first check), and only adds patience when the row genuinely isn't
+// rendered yet.
+async function waitForRowExists(tabId, rin, maxWaitMs) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    if (await exec(tabId, { action: 'rowExists', rin })) return true;
+    await bgSleep(100);
   }
   return false;
 }
