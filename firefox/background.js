@@ -355,8 +355,7 @@ async function goToNextPage(tabId) {
     return { ok: false, reason: 'explicit save before page turn failed: ' + preSave.reason };
   }
 
-  const before = await exec(tabId, { action: 'getCurrentPage' });
-  const beforeMax = await exec(tabId, { action: 'getMaxRin' });
+  const before = await exec(tabId, { action: 'getPageState' });
   const navClick = await exec(tabId, { action: 'clickNextOrBegin' });
   if (!navClick.ok) return navClick;
 
@@ -367,17 +366,16 @@ async function goToNextPage(tabId) {
       return { ok: false, reason: navClick.usedBegin ? 'save failed while creating the next page' : 'save failed while turning to the next page' };
     }
 
+    const now = await exec(tabId, { action: 'getPageState' });
     if (navClick.usedBegin) {
       // "Does any row exist" isn't a real "the new page landed" signal here —
       // it's true instantly on the OLD page too, since that already has rows.
       // The max RIN actually growing past what it was before this click is
       // the real completion signal, so poll on that directly.
-      const afterMax = await exec(tabId, { action: 'getMaxRin' });
-      if (afterMax.maxRin !== null && (beforeMax.maxRin === null || afterMax.maxRin > beforeMax.maxRin)) {
-        return { ok: true, usedBegin: true, grew: true, maxRin: afterMax.maxRin };
+      if (now.maxRin !== null && (before.maxRin === null || now.maxRin > before.maxRin)) {
+        return { ok: true, usedBegin: true, grew: true, maxRin: now.maxRin };
       }
     } else {
-      const now = await exec(tabId, { action: 'getCurrentPage' });
       if (now.page && before.page && now.page > before.page) return { ok: true, usedBegin: false };
     }
 
@@ -510,30 +508,27 @@ function pageStepExecutor(step) {
       case 'checkSaveError':
         return { hasError: hasSaveError() };
 
-      // Read-only page-position checks (no click) — used to poll for a page
-      // turn actually landing instead of assuming it did after a fixed wait.
-      case 'getCurrentPage': {
+      // Read-only page-position + row-ceiling check in one call (no click) —
+      // used to poll for a page turn actually landing, and for whether a
+      // newly-created page genuinely added rows, without paying for two
+      // separate executeScript round-trips every poll tick.
+      case 'getPageState': {
         const btn = Array.from(document.querySelectorAll('button')).find(b =>
           /currently on page \d+ of \d+/i.test(b.getAttribute('aria-label') || ''));
-        if (!btn) return { page: null, total: null };
-        const m = (btn.getAttribute('aria-label') || '').match(/currently on page (\d+) of (\d+)/i);
-        return m ? { page: parseInt(m[1], 10), total: parseInt(m[2], 10) } : { page: null, total: null };
-      }
-
-      // Highest RIN currently rendered anywhere on the page — used to tell
-      // "creating a new page genuinely added rows we haven't reached yet"
-      // (fine, keep going) apart from "creating a new page didn't move the
-      // ceiling at all" (stuck — stop before making more junk pages).
-      case 'getMaxRin': {
-        let max = null;
+        let page = null, total = null;
+        if (btn) {
+          const m = (btn.getAttribute('aria-label') || '').match(/currently on page (\d+) of (\d+)/i);
+          if (m) { page = parseInt(m[1], 10); total = parseInt(m[2], 10); }
+        }
+        let maxRin = null;
         document.querySelectorAll('input[name^="familyTree."]').forEach(el => {
           const m = el.name.match(/^familyTree\.(\d+)\./);
           if (m) {
             const n = parseInt(m[1], 10);
-            if (max === null || n > max) max = n;
+            if (maxRin === null || n > maxRin) maxRin = n;
           }
         });
-        return { maxRin: max };
+        return { page, total, maxRin };
       }
 
       case 'clickNextOrBegin': {
